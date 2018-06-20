@@ -1,0 +1,38 @@
+---
+title: "compas_explorations"
+output: html_document
+---
+
+```{r libraries, include=FALSE}
+library(RSQLite)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+```
+
+Converting compas db into a csv with rsqlite
+{r setup, include=FALSE}
+compas <- "compas.db"
+sqlite.driver <- dbDriver("SQLite")
+db <- dbConnect(sqlite.driver, dbname = compas)
+
+dbListTables(db)
+mytable <- dbReadTable(db, "compas")
+
+write.csv(mytable, file = "compas.csv")
+
+#uncleaned by propublic acompas.db data
+raw_compas <- read.csv("compas.csv")
+
+
+```{r compasdata}
+raw_scores <- read.csv("compas-scores-raw.csv")
+two_years_violent <- read.csv("compas-scores-two-years-violent.csv")
+two_years_reg <- read.csv("compas-scores-two-years.csv")
+scores <- read.csv("compas-scores.csv")
+```
+
+```{r coxdata}
+#cox_parsed <- read.csv("cox-parsed.csv")
+#cox_parsed_violent <- read.csv("cox-violent-parsed.csv")
+```
