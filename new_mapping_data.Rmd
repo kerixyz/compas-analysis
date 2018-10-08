@@ -1,0 +1,132 @@
+---
+title: "updated mapping"
+output: html_document
+---
+Notes:
+#1 Don't bother with images for people 56+.  
+We can just use a blank silhouette for those people 
+since our face dataset doesn't have older people in it.
+
+#2 Shift the age groupings slightly
+3: (35, 42] *change to 45*
+4: (42, Inf] *change to 46-55*
+5: 56+ (NO IMAGES)
+
+#3 *I think* that will leave us with:
+For the 35-45 age group, only use images age 35-39
+For the 45-55 age group, use images age 40+
+You will need to add 1 or more 2 images to the 35-45 age group 
+    (for black males and white males), but it looks like there are extra in the dataset
+You should be ok now with the older black defendants.
+We might still be short a couple of images of white'
+    defendants in block #7 (short 3), and block #13 (short 1).
+
+```{r include=FALSE}
+library(tidyverse)
+```
+Cleaning faces dataset leaving only 
+  ID
+  Race
+  Sex
+  Age Category
+```{r faces}
+#reading in the data and formatting the column headers
+faces <- read.csv('D:/Programs/GitHub/compas_analysis/_data_faces/faces_data.csv')
+
+faces <- faces %>% select(ï..Target, Race, Gender, Age)
+colnames(faces) <- c('target','race','sex','age')
+faces$age <- round(faces$age)
+
+#cutting the breaks of the ages 
+faces$cat <-
+    cut(faces$age, 
+    breaks = c(0, 21, 35, 45, 55, Inf), 
+    labels = c('1', '2', '3', '4', '5'))
+
+faces$sex <- 
+    case_when(faces$sex == 'F' ~ 1, faces$sex == 'M' ~ 0)
+
+faces$race <- 
+    case_when(faces$race == 'A' ~ 4, faces$race == 'B' ~ 2, faces$race == 'L' ~ 3, faces$race == 'W' ~ 1)
+
+faces <- 
+    faces %>% 
+    mutate(sex = as.factor(sex), race = as.factor(race))
+
+faces <- 
+    faces %>% 
+    select(-age)
+```
+Cleaning the defendants dataset leaving only the
+  Target ID
+  Race
+  Sex
+  Age Category
+```{r defendants}
+all_defendants <- read.csv('D:/Programs/GitHub/compas_analysis/_data_dartmouth/BROWARD_CLEAN_SUBSET.csv')
+
+def <- 
+    all_defendants %>% 
+    select(id, race, sex, age)
+
+def$cat <- 
+    cut(def$age, 
+    breaks = c(0, 21, 35, 45, 55, Inf), 
+    labels=c('1', '2', '3', '4', '5')) 
+
+def <- 
+    def %>% 
+    mutate(id = as.factor(id), race = as.factor(race), sex = as.factor(sex))
+
+def <- def %>% select(-age)
+
+block <- 
+    all_defendants  %>% 
+    select(id, block_num)
+
+block <- 
+    block %>% 
+    mutate(id = as.factor(id))
+```
+
+```{r}
+#adding one column with combined features
+faces2 <-
+  faces %>%
+  mutate(features = paste(sex, cat, race, sep = '-')) %>%
+  select(-sex, -cat, -race)
+
+def2 <-
+  def %>% 
+  mutate(features = paste(sex, cat, race, sep = '-')) %>%
+  select(-sex, -cat, -race)
+
+#adding block for defendant identification
+def2 <-
+  left_join(def2, block, by = 'id')
+
+#adding index to match faces and defendants
+faces2 <-
+  faces2 %>%
+  group_by(features) %>%
+  mutate(index = 1:n())
+
+def2 <-
+  def2 %>%
+  group_by(block_num, features) %>%
+  mutate(index = 1:n())
+
+#combining both based on features and index
+df_map <- 
+  left_join(def2, faces2, by = c('features', 'index'))
+
+#removing index cause it don't matter yo
+final_map <-
+  df_map %>% 
+  select(-index)
+
+#reordering columns for the last dataframe
+final_map <-
+  final_map[c("features", "block_num", "id", "target")]
+
+```
