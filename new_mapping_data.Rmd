@@ -40,14 +40,18 @@ faces$age <- round(faces$age)
 #cutting the breaks of the ages 
 faces$cat <-
     cut(faces$age, 
-    breaks = c(0, 21, 35, 45, 55, Inf), 
-    labels = c('1', '2', '3', '4', '5'))
+    breaks = c(0, 21, 28, 35, 39, Inf), 
+    labels = c('0', '1', '2', '3', '4'))
 
 faces$sex <- 
-    case_when(faces$sex == 'F' ~ 1, faces$sex == 'M' ~ 0)
+    case_when(faces$sex == 'F' ~ 1, 
+              faces$sex == 'M' ~ 0)
 
 faces$race <- 
-    case_when(faces$race == 'A' ~ 4, faces$race == 'B' ~ 2, faces$race == 'L' ~ 3, faces$race == 'W' ~ 1)
+    case_when(faces$race == 'A' ~ 4, 
+              faces$race == 'B' ~ 2, 
+              faces$race == 'L' ~ 3, 
+              faces$race == 'W' ~ 1)
 
 faces <- 
     faces %>% 
@@ -71,8 +75,8 @@ def <-
 
 def$cat <- 
     cut(def$age, 
-    breaks = c(0, 21, 35, 45, 55, Inf), 
-    labels=c('1', '2', '3', '4', '5')) 
+    breaks = c(0, 21, 28, 35, 45, 55, Inf), 
+    labels=c('0', '1', '2', '3', '4', '5')) 
 
 def <- 
     def %>% 
@@ -117,16 +121,25 @@ def2 <-
   mutate(index = 1:n())
 
 #combining both based on features and index
-df_map <- 
-  left_join(def2, faces2, by = c('features', 'index'))
+df_map2 <-
+  full_join(def2, faces2, by = c('features', 'index'))
+
+#filling 56+ defendants with missing targets
+df_map2$target <- as.character(df_map2$target)
+df_map2$target[is.na(df_map2$target)] = 'empty.png'
+df_map2$target <- as.factor(df_map2$target)
+
+#omitting na values
+df_map2 <- na.omit(df_map2)
 
 #removing index cause it don't matter yo
 final_map <-
-  df_map %>% 
+  df_map2 %>%
   select(-index)
 
 #reordering columns for the last dataframe
 final_map <-
   final_map[c("features", "block_num", "id", "target")]
 
+save(final_map, file = 'final_map.Rda')
 ```
