@@ -1,0 +1,119 @@
+---
+title: "compas_explorations"
+output: html_document
+---
+```{r libraries, include=FALSE}
+library(RSQLite)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+```
+Converting compas db into a csv with rsqlite
+{r setup, include=FALSE}
+compas <- "compas.db"
+sqlite.driver <- dbDriver("SQLite")
+db <- dbConnect(sqlite.driver, dbname = compas)
+
+dbListTables(db)
+mytable <- dbReadTable(db, "compas")
+
+write.csv(mytable, file = "compas.csv")
+
+#uncleaned by propublic acompas.db data
+raw_compas <- read.csv("compas.csv")
+```{r compasdata}
+two_years_violent <- read.csv("C:/Users/kerim/GitHub/compas_analysis/data_propublica/compas-scores-two-years-violent.csv")
+two_years_reg <- read.csv("C:/Users/kerim/GitHub/compas_analysis/data_propublica/compas-scores-two-years.csv")
+raw_scores <- read.csv("C:/Users/kerim/GitHub/compas_analysis/data_propublica/compas-scores-raw.csv")
+scores <- read.csv("C:/Users/kerim/GitHub/compas_analysis/data_propublica/compas-scores.csv")
+```
+The following is me redoing the analysis done by COMPAS
+-> Only keeping defendants COMPAS score within 30 days from arrest
+-> is_recid -1 means there is not COMPAS case at all
+-> c_charge_degree 'O' are ordinary traffic offenses so we remove it
+```{r propublica-analysis}
+df <- two_years_reg %>% 
+  select(age, c_charge_degree, race, age_cat, score_text, sex, 
+         priors_count, days_b_screening_arrest, decile_score, 
+         is_recid, two_year_recid, c_jail_in, c_jail_out) %>%
+  filter(days_b_screening_arrest <= 30) %>%
+  filter(days_b_screening_arrest >= -30) %>%
+  filter(is_recid != -1) %>%
+  filter(c_charge_degree != "O") %>%
+  filter(score_text != 'N/A')
+```
+Swapping jail in and jail out with length of stay
+```{r}
+df$length_of_stay <- as.numeric(as.Date(df$c_jail_out) - as.Date(df$c_jail_in))
+
+
+cor(df$length_of_stay, df$decile_score)
+```
+Looking at basic demographics of defendants
+```{r}
+summary(df$age_cat)
+summary(df$race)
+summary(df$score_text)
+summary(df$sex)
+```
+stabs creates a table from cross classifying factors - in this case, sex and race
+```{r}
+xtabs(~ sex + race, data=df)
+```
+Looking at the distribution of decile scores of black and white defendants
+```{r}
+pblack <- df %>% filter(race == "African-American") %>%
+  ggplot(aes(ordered(decile_score))) +
+  geom_bar() + 
+  xlab("Decile Score") +
+  ylim(0, 650) +
+  ggtitle("Black Defendant's Decile Scores")
+pwhite <- df %>% filter(race == "Caucasian") %>%
+  ggplot(aes(ordered(decile_score))) +
+  geom_bar() +
+  xlab("Decile Score") +
+  ylim(0, 650) +
+  ggtitle("While Defendant's Decile Scores")
+grid.arrange(pblack, pwhite, ncol=2)
+```
+Contingency table with COMPAS decile_score against race
+```{r}
+xtabs(~ decile_score + race, data=df)
+```
+Racial Bias in COMPAS
+We are changing some variables into factors, and then run a logistic regression comparing low against high
+```{r}
+new_df <- df %>%
+  #change degree into a factor
+  mutate(crime_factor = factor(c_charge_degree)) %>%
+  #change categories into a factor
+  mutate(age_factor = as.factor(age_cat)) %>%
+  within(age_factor <- relevel(age_factor, ref=1)) %>%
+  #change race into a factor
+  mutate(race_factor = as.factor(race)) %>%
+  within(race_factor <- relevel(race_factor, ref=3)) %>%
+  #change gender into a factor
+  mutate(gender_factor = factor(sex, labels = c("Female", "Male"))) %>%
+  within(gender_factor <- relevel(gender_factor, ref=2)) %>%
+  #change low to lowscore, and medium-high to high score
+  mutate(score_factor = factor(score_text != "Low", labels = c("LowScore", "HighScore")))
+
+#linear model where gender, age, race, priors, crimes, and two_year recid determines score
+model1 <- glm(score_factor ~ gender_factor + age_factor + race_factor 
+              + priors_count + crime_factor + two_year_recid, 
+              family="binomial", data=new_df)
+summary(model1)
+```
+
+```{r}
+summary(df$race)
+
+df %>% filter(race=='African-American' | race == 'Caucasian') %>% nrow()
+```
+
+```{r coxdata}
+#cox_parsed <- read.csv("cox-parsed.csv")
+#cox_parsed_violent <- read.csv("cox-violent-parsed.csv")
+```

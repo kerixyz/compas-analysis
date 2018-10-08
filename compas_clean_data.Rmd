@@ -1,0 +1,117 @@
+---
+title: "compas_clean_data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(stringr)
+library(tidyverse)
+og_faces <- read.csv('C:/Users/kerim/GitHub/compas_analysis/data_faces/faces_data.csv')
+og_defendants <-read.csv('C:/Users/kerim/GitHub/compas_analysis/data_dartmouth/BROWARD_CLEAN_SUBSET.csv')
+```
+Cleaning the Face dataset
+```{r}
+#selecting relevant columns
+faces <- 
+  og_faces %>%
+  select(ï..Target, Race, Gender, Age)
+#renaming the columns
+colnames(faces) <- c('image', 'race', 'gender', 'age')
+
+#rounding the age
+faces$age <- round(faces$age)
+#creating a new age category column
+faces$age_cat <-
+  case_when(faces$age < 25 ~ 1,
+            faces$age > 35 ~ 3,
+            TRUE ~ 2)
+#factor-ing the ages
+faces$age_cat <- as.factor(faces$age_cat)
+
+#Race includes: 109 A, 197 B, 108 L, 183 W
+#Gender includes: 307 F, 290 M
+```
+Cleaning the Defendants dataset
+```{r}
+defendants <-
+  og_defendants %>%
+  select(block_num, id, race, sex, age)
+colnames(defendants) <- c('block','id','race','gender','age')
+#factor-ing block numbers
+defendants$block <- as.factor(defendants$block)
+
+#summary(defendants$race)
+#7A, 530B, 85L, 1N, 377W
+#converting numbers to letters
+defendants$race <- 
+  case_when(defendants$race == '1' ~ 'W',
+            defendants$race == '2' ~ 'B',
+            defendants$race == '3' ~ 'L',
+            defendants$race == '4' ~ 'A',
+            defendants$race == '5' ~ 'N',
+            defendants$race == '6' ~ 'O')
+#factoring race
+defendants$race <- as.factor(defendants$race)
+
+#summary(defendants$gender)
+#Gender: 197F, 803M
+#converting numbers to letters
+defendants$gender <-
+  case_when(defendants$gender == '0' ~ 'M',
+            defendants$gender == '1' ~ 'F')
+#turning them into facotrs
+defendants$gender <- as.factor(defendants$gender)
+
+#generating age categories
+defendants$age_cat <-
+  case_when(defendants$age < 25 ~ 1,
+            defendants$age > 35 ~ 3,
+            TRUE ~ 2)
+#factor-ing the ages
+defendants$age_cat <- as.factor(defendants$age_cat)
+
+clean_defendants <- defendants
+clean_faces <- faces
+```
+Mapping eligible faces per defendant in block1
+```{r}
+defendants1 <-
+  clean_defendants %>%
+  filter(block == 1) %>%
+  select(-block, -age)
+
+defendants1 <-
+  defendants1 %>%
+  mutate(features = paste(race, gender, age_cat, sep='-')) %>%
+  select(-race, -gender, -age_cat)
+defendants1$features <- as.factor(defendants1$features)
+
+save(defendants1, file = 'def_b1.Rda')
+
+faces1 <-
+  clean_faces %>%
+  mutate(features = paste(race, gender, age_cat, sep='-')) %>%
+  select(-race, -gender, -age_cat, -age)
+faces1$features <- as.factor(faces1$features)
+
+both_features <- 
+  left_join(defendants1, faces1, by = 'features')
+
+#generates a new column that counts for each available image per given defendant
+both_features <-
+  both_features %>%
+  group_by(id) %>%
+  mutate(count = 1:n())
+
+mapping_block1<- 
+  both_features %>%
+  spread(key = count, value = image)
+
+mapping_block1 <-
+  mapping_block1%>%
+  mutate_all(as.character)
+
+mapping_block1[is.na(mapping_block1)] <- 0
+
+save(mapping_block1, file='block1_mapping.Rda')
+```

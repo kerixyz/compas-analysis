@@ -1,0 +1,97 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+Setting up 
+```{r}
+library(dplyr)
+library(tidyverse)
+library(EvaluationMeasures)
+
+#grabbing original 7214 student dataset
+df_og <- read.csv('C:/Users/kerim/GitHub/compas_analysis/data_propublica/compas-scores-two-years.csv')
+df_dm <- read.csv('C:/Users/kerim/GitHub/compas_analysis/data_dartmouth/BROWARD_CLEAN_SUBSET.csv')
+#df_dm_charge <- read.csv('C:/Users/kerim/GitHub/compas_analysis/data_dartmouth/CHARGE_ID.csv')
+
+```
+Cleaning datasets
+```{r}
+#Selecting similar columns
+df_og <- df_og %>%
+  select(id, race, sex, age, juv_fel_count, juv_misd_count, priors_count, c_charge_desc, c_charge_degree, decile_score, two_year_recid)
+df_dm <- df_dm %>%
+  select(-block_num)
+
+#changing decile scores to a binary value s.t. 1-4 is 0 and 5-10 is 1
+df_og <- df_og %>% mutate(compas_pred = case_when(decile_score <=4 ~ 0, decile_score >=5 ~1))
+df_dm <- df_dm %>% mutate(compas_pred = case_when(compas_decile_score <=4 ~ 0, compas_decile_score >=5 ~1))
+
+#generating racially specific datasets
+og_black <- df_og %>% filter(race=='African-American')
+og_white <- df_og %>% filter(race=='Caucasian')
+
+dm_black <- df_dm %>% filter(race==2)
+dm_white <- df_dm %>% filter(race==1)
+```
+Manually entering dataframe for COMPAS performance
+```{r}
+race <- c('Black','White')
+man_acc <- c(0.638, 0.669)
+man_fpr <- c(0.449, 0.235)
+man_fnr <- c(0.281, 0.477)
+og_man_perf <- data.frame(race, man_acc, man_fpr, man_fnr)
+```
+Calculating COMPAS perfomance on accuracy, fpr, and fnr on original dataset
+You should just totally write a function for these cause you're being lazy rn
+```{r}
+
+og_black_fnr <- EvaluationMeasures.FNR(Real = og_black$two_year_recid, Predicted = og_black$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+og_black_fpr <- EvaluationMeasures.FPR(Real = og_black$two_year_recid, Predicted = og_black$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+og_black_acc <- EvaluationMeasures.Accuracy(Real = og_black$two_year_recid, Predicted = og_black$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+
+og_white_fnr <- EvaluationMeasures.FNR(Real = og_white$two_year_recid, Predicted = og_white$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+og_white_fpr <- EvaluationMeasures.FPR(Real = og_white$two_year_recid, Predicted = og_white$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+og_white_acc <- EvaluationMeasures.Accuracy(Real = og_white$two_year_recid, Predicted = og_white$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+
+race <- c('Black','White')
+og_acc <- c(og_black_acc, og_white_acc)
+og_fpr <- c(og_black_fpr, og_white_fpr)
+og_fnr <- c(og_black_fnr, og_white_fnr)
+og_calc_perf <- data.frame(race, og_acc, og_fpr, og_fnr)
+```
+
+Calculating Darmouth performance on accuracy, fpr, and fnr on 1000 dataset
+```{r}
+dm_black_fnr <- EvaluationMeasures.FNR(Real = dm_black$two_year_recid, Predicted = dm_black$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+dm_black_fpr <- EvaluationMeasures.FPR(Real = dm_black$two_year_recid, Predicted = dm_black$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+dm_black_acc <- EvaluationMeasures.Accuracy(Real = dm_black$two_year_recid, Predicted = dm_black$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+
+dm_white_fnr <- EvaluationMeasures.FNR(Real = dm_white$two_year_recid, Predicted = dm_white$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+dm_white_fpr <- EvaluationMeasures.FPR(Real = dm_white$two_year_recid, Predicted = dm_white$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+dm_white_acc <- EvaluationMeasures.Accuracy(Real = dm_white$two_year_recid, Predicted = dm_white$compas_pred, Positive = 1,TP = NULL, TN = NULL, FP = NULL, FN = NULL)
+
+race <- c('Black','White')
+dm_acc <- c(dm_black_acc, dm_white_acc)
+dm_fpr <- c(dm_black_fpr, dm_white_fpr)
+dm_fnr <- c(dm_black_fnr, dm_white_fnr)
+dm_calc_perf <- data.frame(race, dm_acc, dm_fpr, dm_fnr)
+```
+Bind all performannnce on race into one big dataframe
+```{r}
+all_perf <- full_join(og_man_perf, og_calc_perf, by = 'race')
+all_perf <- full_join(all_perf, dm_calc_perf, by = 'race')
+
+all_perf <- all_perf[c(1, 2, 5, 8, 3, 6, 9, 4, 7, 10)]
+save(all_perf, file = 'all_perf.Rda')
+```
+
+Comparing ethnic ratio of propublica and dartmouth dataset
+race <- c('African-America','Asian','Caucasian','Hispanic','Native-American','Other')
+og <- c(3175,31,2103,509,11,343)
+new <- c(530,7,377,85,1,0)
+comparedata <- data.frame(race, og, new)
+
+comparedata <- comparedata %>% mutate(ratio_og = og/sum(og))
+comparedata <- comparedata %>% mutate(ratio_new = new/sum(new))

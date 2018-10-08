@@ -1,0 +1,114 @@
+---
+title: "compas_facemap"
+output: html_document
+---
+
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(EvaluationMeasures)
+```
+Clean Face Data
+```{r}
+faces <- read.csv('C:/Users/kerim/GitHub/compas_analysis/data_faces/faces_data.csv')
+faces <- faces %>% select(ï..Target, Race, Gender, Age)
+colnames(faces) <- c('target','race','sex','age')
+faces$age <- round(faces$age)
+
+faces$cat <- cut(faces$age, breaks=c(0, 21, 28, 35, 42, Inf), 
+              labels=c('0', '1', '2', '3', '4')) 
+
+faces$sex <- case_when(faces$sex=='F' ~ 1, 
+                       faces$sex =='M' ~ 0)
+
+faces$race <- case_when(faces$race == 'A' ~ 4,
+                        faces$race == 'B' ~ 2,
+                        faces$race == 'L' ~ 3,
+                        faces$race == 'W' ~ 1)
+
+faces <- faces %>% mutate(sex = as.factor(sex),
+                          race = as.factor(race))
+
+faces <- faces %>% select(-age)
+```
+Clean DM Data
+```{r}
+dm_all <-read.csv('C:/Users/kerim/GitHub/compas_analysis/data_dartmouth/BROWARD_CLEAN_SUBSET.csv')
+
+dm <- dm_all %>% select(id, race, sex, age)
+
+dm$cat <- cut(dm$age, breaks=c(0, 21, 28, 35, 42, Inf), 
+              labels=c('0', '1', '2', '3', '4')) 
+
+dm <- dm %>% mutate(id = as.factor(id),
+                    race = as.factor(race),
+                    sex = as.factor(sex))
+id_block <- dm_all %>% select(id, block_num)
+id_block <- id_block %>% mutate(id = as.factor(id))
+dm <- dm %>% select(-age)
+```
+
+```{r}
+all_data <- left_join(dm, faces, by = c('sex','cat','race'))
+all_data <- all_data %>% mutate(race = as.factor(race))
+
+all_data2 <- all_data %>% mutate(code = paste(sex, cat, race))
+
+all_data_v1 <- all_data %>%
+  group_by(id) %>%
+  mutate(count = 1:n())
+
+all_data_v1 <- all_data_v1 %>% spread(key=count, value=target)
+
+all_data_v1.2 <- left_join(all_data_v1, id_block, by='id')
+
+all_data_v2 <- all_data %>%
+  group_by(target) %>%
+  mutate(bin=1)
+
+all_data_v2 <- all_data_v2 %>% spread(key = id, value= bin)
+all_data_v2[is.na(all_data_v2)] <- 0
+
+all_mapping_v1 <- all_data_v1.2
+all_mapping_v2 <- all_data_v2
+
+save(all_mapping_v1, file = 'all_mapping_v1.Rda')
+save(all_mapping_v2, file = 'all_mapping_v2.Rda')
+
+```
+
+```{r}
+library(stringr)
+
+dm2 <- dm %>%
+  mutate(comb = str_c(race, sex, cat, sep="-")) %>%
+  select(id, comb) %>%
+  group_by(comb) %>%
+  mutate(def_count=n()) %>%
+  select(-id) %>%
+  unique()
+
+faces2 <- faces %>%
+  mutate(comb = str_c(race, sex, cat, sep="-")) %>%
+  select(target, comb) %>%
+  group_by(comb) %>%
+  mutate(face_count=n()) %>%
+  select(-target) %>%
+  unique()
+
+both_count <- full_join(dm2, faces2, by='comb')
+
+both_count <- both_count %>%
+  mutate(need_more_face = ifelse(def_count > face_count, 1, 0))
+
+both_count[is.na(both_count)] <- 0
+
+split_col <- str_split_fixed(both_count$comb, '-', n=3)
+colnames(split_col) <- c('race','sex','cat')
+
+split_cold <- data.frame
+
+load("C:/Users/kerim/GitHub/compas_analysis/b1_mapping.Rda")
+```
+
