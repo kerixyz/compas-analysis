@@ -1,0 +1,104 @@
+---
+title: "generating_quizzes_forjs"
+output: html_document
+---
+
+```{r setup}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(stringr)
+
+load('final_map.Rda')
+load('new_blurbs.Rda')
+
+all_blurb <-
+  new_blurbs
+
+colnames(all_blurb) <-
+  c("block", "id", "blurb", "two_year_recid")
+
+mapping <-
+  final_map %>%
+  ungroup() %>%
+  select(block_num, id, target)
+
+colnames(mapping) <-
+  c("block", "id", "target")
+
+all_blurb$id <- 
+  factor(all_blurb$id)
+
+questions <- 
+  left_join(all_blurb, mapping, by=c('block','id'))
+```
+
+questionFactory format
+{
+question: "blurb"
+option: ["No", "Yes"],
+answer: 0/1,
+image: image_path,
+block: "blocknum"
+}
+
+```{r}
+
+clean_blurb <- questions
+
+clean_blurb$option <- "\n option: [\"No\", \"Yes\"]"
+clean_blurb$path <- "images/"
+
+clean_blurb$target <-
+  paste(clean_blurb$target, '.jpg', sep='')
+
+
+clean_blurb$b_lead <- "{ \n question: "
+clean_blurb$blurb <- shQuote(clean_blurb$blurb)
+
+clean_blurb$a_lead <- "\n answer: "
+
+clean_blurb$i_lead <- "\n image: "
+
+clean_blurb$path <-
+  paste(clean_blurb$path, clean_blurb$target, sep='')
+
+clean_blurb$path <- shQuote(clean_blurb$path)
+
+clean_blurb$bl_lead <- "\n block: "
+
+clean_blurb$end <- " \n }"
+
+clean_blurb$blurb<-
+  paste(clean_blurb$b_lead, clean_blurb$blurb)
+
+clean_blurb$a_lead <-
+  paste(clean_blurb$a_lead, clean_blurb$two_year_recid)
+
+clean_blurb$path <- 
+  paste(clean_blurb$i_lead, clean_blurb$path)
+
+clean_blurb$block <-
+  paste(clean_blurb$bl_lead, clean_blurb$block, clean_blurb$end)
+
+blurbs <-
+  clean_blurb %>%
+  select(blurb, option, a_lead, path, block)
+
+for(i in seq_along(blurbs)){
+  questions <- paste(blurbs$blurb, 
+                     blurbs$option,
+                     blurbs$a_lead, 
+                     blurbs$path, 
+                     blurbs$block,
+                     sep = ",")
+}
+
+
+questions <- toString(questions)
+
+
+head(questions)
+write(questions, file='questions.txt')
+```
+

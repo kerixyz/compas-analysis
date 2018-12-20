@@ -1,93 +1,97 @@
 ---
-title: "all_blurb"
+title: "matching_blurb_crime"
 output: html_document
 ---
 
-```{r libraries, include = FALSE}
+
+```{r setup}
 library(dplyr)
 library(tidyverse)
 library(ggplot2)
 library(stringr)
+library(tidyr)
 
-load('all_1000_blurb.Rda')
-load('map_all.Rda')
-head(all_blurb)
+broward_clean_subset <- read_csv('_data_dartmouth/BROWARD_CLEAN_SUBSET.csv')
+charge_id <- read_csv('_data_dartmouth/CHARGE_ID.csv')
 
-map_all <- map_all %>% select(block_num, id, target)
-colnames(map_all) <- c("block","id","target")
-map_all$target <-as.character(map_all$target)
-map_all$target[is.na(map_all$target)] <- 'help'
-map_all$target <- as.factor(map_all$target)
-
-all_blurb$id <- factor(all_blurb$id)
-all_blurb <- left_join(all_blurb, map_all, by=c('block','id'))
 ```
-
-questionFactory 
-{ 
-question: "blurb",
-option: ["No", "Yes"],
-answer: 0/1 ,
-image: "image path"
-block: blocknum
-}
+The defendant is a [RACE] [SEX] aged [AGE]. 
+They have been charged with: [CRIME_CHARGE_DESCRIPTION].
+This crime is classified as a [CRIME_DEGREE].
+They have been convicted of [PRIORS COUNT] prior crimes.
+They have [JUV_FEL_COUNT] juvenile felony charges and [JUV_MISD_COUNT] juvenile misdemeanor charges on their record.
 
 ```{r}
-clean_blurb <- all_blurb
+#removed unnecessary columns
+charge_id <-
+  charge_id %>%
+  select(charge_id, c_charge_desc, mturk_charge_name)
 
-clean_blurb$option <- "\n option: [\"No\", \"Yes\"]"
-clean_blurb$path <- "images/"
+#replaced charge_id number with charge description
+df <-
+  merge(broward_clean_subset, charge_id, by = "charge_id")
 
-clean_blurb$target <-
-  paste(clean_blurb$target, '.jpg', sep='')
+#removed the id, and the original description
+df <-
+  df %>%
+  select(-c_charge_desc, -charge_id)
 
+df$race <- 
+  case_when(df$race == '1' ~ 'white', 
+            df$race == '2' ~ 'black', 
+            df$race == '3' ~ 'hispanic', 
+            df$race == '4' ~ 'asian',
+            df$race == '5' ~ 'native american')
 
-clean_blurb$b_lead <- "{ \n question: "
-clean_blurb$blurb <- shQuote(clean_blurb$blurb)
+df$sex  <-
+  case_when(df$sex == '0' ~ 'male',
+            df$sex == '1' ~ 'female')
 
-clean_blurb$a_lead <- "\n answer: "
+df$`charge_degree (misd/fel)` <-
+  case_when(df$`charge_degree (misd/fel)` == '1' ~ 'felony',
+            df$`charge_degree (misd/fel)` == '0' ~ 'misdemeanor')
+```
 
-clean_blurb$i_lead <- "\n image: "
+The defendant is a [RACE] [SEX] aged [AGE]. 
+They have been charged with: [CRIME_CHARGE_DESCRIPTION].
+This crime is classified as a [CRIME_DEGREE].
+They have been convicted of [PRIORS COUNT] prior crimes.
+They have [JUV_FEL_COUNT] juvenile felony charges and [JUV_MISD_COUNT] juvenile misdemeanor charges on their record.
 
-clean_blurb$path <-
-  paste(clean_blurb$path, clean_blurb$target, sep='')
+```{r}
+df$s1 <- 
+  paste("The defendant is a", df$race, df$sex, "aged", df$age, sep=" ")
+df$s2 <-
+  paste("They have been charged with:", df$mturk_charge_name, sep=" ")
+df$s3 <-
+  paste("This crime is classified as a", df$`charge_degree (misd/fel)`, sep= " ")
+df$s4 <-
+  paste("They have been convicted of", df$priors_count, "prior crimes", sep = " ")
+df$s5 <-
+  paste("They have", df$juv_fel_count, "juvenile felony charges and", df$juv_misd_count, "juvenile misdemeanor charges on their record.", sep = " ")
 
-clean_blurb$path <- shQuote(clean_blurb$path)
+new_df <- df
+```
+Need to store 'block', 'id', 'blurb', 'two_year_recid'
+```{r}
+new_df <-
+  new_df %>%
+  select(block_num, id, s1, s2, s3, s4, s5, two_year_recid)
 
-clean_blurb$bl_lead <- "\n block: "
+new_df$blurb <-
+  paste(new_df$s1, new_df$s2, new_df$s3, new_df$s4, new_df$s5, sep = ". ")
 
-clean_blurb$end <- " \n }"
+new_df$question <-
+  "Do you think this person will commit another crime within 2 years?"
 
-clean_blurb$blurb<-
-  paste(clean_blurb$b_lead, clean_blurb$blurb)
+new_df$blurb <-
+  paste(new_df$blurb, new_df$question, sep = ' ')
 
-clean_blurb$a_lead <-
-  paste(clean_blurb$a_lead, clean_blurb$two_year_recid)
+new_df <-
+  new_df %>%
+  select(block_num, id, blurb, two_year_recid)
 
-clean_blurb$path <- 
-  paste(clean_blurb$i_lead, clean_blurb$path)
+new_blurbs <- new_df
 
-clean_blurb$block <-
-  paste(clean_blurb$bl_lead, clean_blurb$block, clean_blurb$end)
-
-blurbs <-
-  clean_blurb %>%
-  select(blurb, option, a_lead, path, block)
-
-for(i in seq_along(blurbs)){
-  questions <- paste(blurbs$blurb, 
-                     blurbs$option,
-                     blurbs$a_lead, 
-                     blurbs$path, 
-                     blurbs$block,
-                     sep = ",")
-}
-
-
-questions <- toString(questions)
-
-
-head(questions)
-write(questions, file='questions.txt')
-
+save(new_blurbs, file = 'new_blurbs.Rda')
 ```
